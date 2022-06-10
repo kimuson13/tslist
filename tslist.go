@@ -14,6 +14,11 @@ import (
 
 const doc = "tslist is ..."
 
+const (
+	ANY   = "any"
+	TILDA = "~"
+)
+
 type Visitor struct {
 	nest   int
 	pass   *analysis.Pass
@@ -83,13 +88,13 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 
 	typeSet := make(map[string]int)
 	for _, results := range visit.result {
-		if first := results[0]; len(results) == 1 && first == "any" {
+		if first := results[0]; len(results) == 1 && first == ANY {
 			typeSet[first]++
 			continue
 		}
 
-		if lo.Contains(results, "any") {
-			typeSet["any"]++
+		if lo.Contains(results, ANY) {
+			typeSet[ANY]++
 			continue
 		}
 
@@ -99,19 +104,19 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	}
 
 	res := make([]string, 0, len(typeSet))
-	if _, ok := typeSet["any"]; ok {
+	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
-			res = append(res, "any")
+			res = append(res, ANY)
 			return VisitorResult{interfaceType.Pos(), name, res}
 		}
 
-		visit.nest -= typeSet["any"]
-		typeSet["any"]++
+		visit.nest -= typeSet[ANY]
+		typeSet[ANY]++
 	}
 
 	for typ := range typeSet {
-		if strings.HasPrefix(typ, "~") {
-			val := strings.Trim(typ, "~")
+		if strings.HasPrefix(typ, TILDA) {
+			val := strings.Trim(typ, TILDA)
 			if _, ok := typeSet[val]; ok {
 				typeSet[val]++
 			}
@@ -134,7 +139,7 @@ func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 
 	if expr.Methods.List == nil {
 		v.nest++
-		v.result[v.nest] = append(v.result[v.nest], "any")
+		v.result[v.nest] = append(v.result[v.nest], ANY)
 	}
 
 	for _, field := range expr.Methods.List {
