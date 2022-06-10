@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/gostaticanalysis/testutil v0.4.0
+	github.com/samber/lo v1.21.0
 	golang.org/x/tools v0.1.10
 )
 
@@ -12,6 +13,7 @@ require (
 	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/tenntenn/modver v1.0.1 // indirect
 	github.com/tenntenn/text/transform v0.0.0-20200319021203-7eef512accb3 // indirect
+	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654 // indirect
 	golang.org/x/text v0.3.7 // indirect

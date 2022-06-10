@@ -7,11 +7,19 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/samber/lo"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 const doc = "tslist is ..."
+
+const INF = 1 << 60
+
+const (
+	ANY   = "any"
+	TILDA = "~"
+)
 
 type Visitor struct {
 	nest   int
@@ -54,12 +62,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
-				inter, _ := spec.Type.(*ast.InterfaceType)
-				if inter == nil {
+				interfaceType, _ := spec.Type.(*ast.InterfaceType)
+				if interfaceType == nil {
 					continue
 				}
 
-				res := InterfaceVisitor(spec.Name.Name, inter, pass)
+				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
 				if len(res.Result) == 0 {
 					pass.Reportf(res.Pos, "no type")
 					fmt.Printf("%s: no type set\n", res.Name)
@@ -80,46 +88,53 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	visit := Visitor{pass: pass, name: name, result: mp}
 	visit.interfaceVisitor(interfaceType)
 
-	newRes := make(map[string]int)
-	for _, results := range visit.result {
-		if len(results) == 1 && results[0] == "any" {
-			newRes[results[0]]++
+	res := visit.parseTypeSet()
+
+	return VisitorResult{interfaceType.Pos(), name, res}
+}
+
+func (v *Visitor) parseTypeSet() []string {
+	typeSet := make(map[string]int)
+	// union
+	for _, results := range v.result {
+		if lo.Contains(results, ANY) {
+			typeSet[ANY]++
 			continue
 		}
+
 		for _, result := range results {
-			if result != "any" {
-				newRes[result]++
+			typeSet[result]++
+		}
+	}
+
+	res := make([]string, 0, len(typeSet))
+	// intersection
+	if _, ok := typeSet[ANY]; ok {
+		if len(typeSet) == 1 {
+			res = append(res, ANY)
+			return res
+		}
+
+		v.nest -= typeSet[ANY]
+		typeSet[ANY] = INF
+	}
+
+	for typ := range typeSet {
+		if strings.HasPrefix(typ, TILDA) {
+			defaultType := strings.Trim(typ, TILDA)
+			if _, ok := typeSet[defaultType]; ok {
+				typeSet[defaultType]++
 			}
 		}
 	}
 
-	res := make([]string, 0, len(newRes))
-	if _, ok := newRes["any"]; ok {
-		if len(newRes) == 1 {
-			res = append(res, "any")
-			return VisitorResult{interfaceType.Pos(), name, res}
-		}
-
-		visit.nest -= newRes["any"]
-		newRes["any"]++
-	}
-
-	for typ := range newRes {
-		if strings.HasPrefix(typ, "~") {
-			val := strings.Trim(typ, "~")
-			if _, ok := newRes[val]; ok {
-				newRes[val]++
-			}
-		}
-	}
-
-	for typ, num := range newRes {
-		if num == visit.nest {
+	for typ, num := range typeSet {
+		if num == v.nest {
 			res = append(res, typ)
 		}
 	}
 
-	return VisitorResult{interfaceType.Pos(), name, res}
+	return res
 }
 
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
@@ -129,7 +144,7 @@ func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 
 	if expr.Methods.List == nil {
 		v.nest++
-		v.result[v.nest] = append(v.result[v.nest], "any")
+		v.result[v.nest] = append(v.result[v.nest], ANY)
 	}
 
 	for _, field := range expr.Methods.List {
