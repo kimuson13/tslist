@@ -22,10 +22,11 @@ const (
 )
 
 type Visitor struct {
-	nest   int
-	pass   *analysis.Pass
-	name   string
-	result map[int][]string
+	nest          int
+	pass          *analysis.Pass
+	interfaceName string
+	methodNames   string
+	result        map[int][]string
 }
 
 type VisitorResult struct {
@@ -85,7 +86,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
 	mp := make(map[int][]string)
-	visit := Visitor{pass: pass, name: name, result: mp}
+	visit := Visitor{pass: pass, interfaceName: name, result: mp}
 	visit.interfaceVisitor(interfaceType)
 
 	res := visit.parseTypeSet()
@@ -178,7 +179,7 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 		}
 		switch dec := dec.Type.(type) {
 		case *ast.InterfaceType:
-			res := InterfaceVisitor(v.name, dec, v.pass)
+			res := InterfaceVisitor(v.interfaceName, dec, v.pass)
 			for _, typ := range res.Result {
 				v.result[v.nest] = append(v.result[v.nest], typ)
 			}
