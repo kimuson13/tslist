@@ -54,19 +54,19 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
-				inter, _ := spec.Type.(*ast.InterfaceType)
-				if inter == nil {
+				interfaceType, _ := spec.Type.(*ast.InterfaceType)
+				if interfaceType == nil {
 					continue
 				}
 
-				res := InterfaceVisitor(spec.Name.Name, inter, pass)
+				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
 				if len(res.Result) == 0 {
 					pass.Reportf(res.Pos, "no type")
-					fmt.Printf("%s: no type set\n", res.Name)
+					// fmt.Printf("%s: no type set\n", res.Name)
 				} else {
 					sort.Slice(res.Result, func(i, j int) bool { return res.Result[i] < res.Result[j] })
 					pass.Reportf(res.Pos, "%v", res.Result)
-					fmt.Printf("%s: %v\n", res.Name, res.Result)
+					// fmt.Printf("%s: %v\n", res.Name, res.Result)
 				}
 			}
 		}
@@ -82,8 +82,8 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 
 	newRes := make(map[string]int)
 	for _, results := range visit.result {
-		if len(results) == 1 && results[0] == "any" {
-			newRes[results[0]]++
+		if first := results[0]; len(results) == 1 && first == "any" {
+			newRes[first]++
 			continue
 		}
 		for _, result := range results {
