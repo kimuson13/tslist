@@ -88,8 +88,15 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	visit := Visitor{pass: pass, name: name, result: mp}
 	visit.interfaceVisitor(interfaceType)
 
+	res := visit.parseTypeSet()
+
+	return VisitorResult{interfaceType.Pos(), name, res}
+}
+
+func (v *Visitor) parseTypeSet() []string {
 	typeSet := make(map[string]int)
-	for _, results := range visit.result {
+	// union
+	for _, results := range v.result {
 		if lo.Contains(results, ANY) {
 			typeSet[ANY]++
 			continue
@@ -101,32 +108,33 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	}
 
 	res := make([]string, 0, len(typeSet))
+	// intersection
 	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
 			res = append(res, ANY)
-			return VisitorResult{interfaceType.Pos(), name, res}
+			return res
 		}
 
-		visit.nest -= typeSet[ANY]
+		v.nest -= typeSet[ANY]
 		typeSet[ANY] = INF
 	}
 
 	for typ := range typeSet {
 		if strings.HasPrefix(typ, TILDA) {
-			val := strings.Trim(typ, TILDA)
-			if _, ok := typeSet[val]; ok {
-				typeSet[val]++
+			defaultType := strings.Trim(typ, TILDA)
+			if _, ok := typeSet[defaultType]; ok {
+				typeSet[defaultType]++
 			}
 		}
 	}
 
 	for typ, num := range typeSet {
-		if num == visit.nest {
+		if num == v.nest {
 			res = append(res, typ)
 		}
 	}
 
-	return VisitorResult{interfaceType.Pos(), name, res}
+	return res
 }
 
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
