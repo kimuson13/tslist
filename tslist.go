@@ -14,6 +14,8 @@ import (
 
 const doc = "tslist is ..."
 
+const INF = 1 << 60
+
 const (
 	ANY   = "any"
 	TILDA = "~"
@@ -88,11 +90,6 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 
 	typeSet := make(map[string]int)
 	for _, results := range visit.result {
-		if first := results[0]; len(results) == 1 && first == ANY {
-			typeSet[first]++
-			continue
-		}
-
 		if lo.Contains(results, ANY) {
 			typeSet[ANY]++
 			continue
@@ -111,7 +108,7 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 		}
 
 		visit.nest -= typeSet[ANY]
-		typeSet[ANY]++
+		typeSet[ANY] = INF
 	}
 
 	for typ := range typeSet {

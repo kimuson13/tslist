@@ -61,3 +61,16 @@ type i11 interface { // want "[int]"
 	f1() int
 	int
 }
+
+type i12 interface { // want "[int]"
+	any
+	any
+	any
+	int
+}
+
+type i13 interface { // want "[int]"
+	any | string
+	string | bool | any | ~float64
+	int
+}
