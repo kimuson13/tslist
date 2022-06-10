@@ -1,14 +1,34 @@
 package tslist
 
 import (
+	"fmt"
 	"go/ast"
+	"go/token"
+	"sort"
+	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
-	"golang.org/x/tools/go/ast/inspector"
 )
 
 const doc = "tslist is ..."
+
+type Visitor struct {
+	nest   int
+	pass   *analysis.Pass
+	name   string
+	result map[int][]string
+}
+
+type VisitorResult struct {
+	Pos    token.Pos
+	Name   string
+	Result []string
+}
+
+type Result struct {
+	Results []VisitorResult
+}
 
 // Analyzer is ...
 var Analyzer = &analysis.Analyzer{
@@ -21,20 +41,149 @@ var Analyzer = &analysis.Analyzer{
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
-	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	for _, f := range pass.Files {
+		for _, dec := range f.Decls {
+			dec, _ := dec.(*ast.GenDecl)
+			if dec == nil || dec.Tok != token.TYPE {
+				continue
+			}
 
-	nodeFilter := []ast.Node{
-		(*ast.Ident)(nil),
-	}
+			for _, spec := range dec.Specs {
+				spec, _ := spec.(*ast.TypeSpec)
+				if spec == nil || spec.Type == nil {
+					continue
+				}
 
-	inspect.Preorder(nodeFilter, func(n ast.Node) {
-		switch n := n.(type) {
-		case *ast.Ident:
-			if n.Name == "gopher" {
-				pass.Reportf(n.Pos(), "identifier is gopher")
+				inter, _ := spec.Type.(*ast.InterfaceType)
+				if inter == nil {
+					continue
+				}
+
+				res := InterfaceVisitor(spec.Name.Name, inter, pass)
+				if len(res.Result) == 0 {
+					pass.Reportf(res.Pos, "no type")
+					fmt.Printf("%s: no type set\n", res.Name)
+				} else {
+					sort.Slice(res.Result, func(i, j int) bool { return res.Result[i] < res.Result[j] })
+					pass.Reportf(res.Pos, "%v", res.Result)
+					fmt.Printf("%s: %v\n", res.Name, res.Result)
+				}
 			}
 		}
-	})
+	}
 
 	return nil, nil
+}
+
+func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
+	mp := make(map[int][]string)
+	visit := Visitor{pass: pass, name: name, result: mp}
+	visit.interfaceVisitor(interfaceType)
+
+	newRes := make(map[string]int)
+	for _, results := range visit.result {
+		if len(results) == 1 && results[0] == "any" {
+			newRes[results[0]]++
+			continue
+		}
+		for _, result := range results {
+			if result != "any" {
+				newRes[result]++
+			}
+		}
+	}
+
+	res := make([]string, 0, len(newRes))
+	if _, ok := newRes["any"]; ok {
+		if len(newRes) == 1 {
+			res = append(res, "any")
+			return VisitorResult{interfaceType.Pos(), name, res}
+		}
+
+		visit.nest -= newRes["any"]
+		newRes["any"]++
+	}
+
+	for typ := range newRes {
+		if strings.HasPrefix(typ, "~") {
+			val := strings.Trim(typ, "~")
+			if _, ok := newRes[val]; ok {
+				newRes[val]++
+			}
+		}
+	}
+
+	for typ, num := range newRes {
+		if num == visit.nest {
+			res = append(res, typ)
+		}
+	}
+
+	return VisitorResult{interfaceType.Pos(), name, res}
+}
+
+func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
+	if expr.Methods == nil {
+		return
+	}
+
+	if expr.Methods.List == nil {
+		v.nest++
+		v.result[v.nest] = append(v.result[v.nest], "any")
+	}
+
+	for _, field := range expr.Methods.List {
+		v.nest++
+		v.exprVisitor(field.Type)
+	}
+}
+
+func (v *Visitor) exprVisitor(expr ast.Expr) {
+	switch expr := expr.(type) {
+	case *ast.BinaryExpr:
+		v.exprVisitor(expr.X)
+		v.exprVisitor(expr.Y)
+	case *ast.Ident:
+		v.identVisitor(expr)
+	case *ast.UnaryExpr:
+		v.unaryVisitor(expr)
+	case *ast.FuncType:
+		v.nest--
+	}
+}
+
+func (v *Visitor) identVisitor(expr *ast.Ident) {
+	if expr.Obj == nil || expr.Obj.Decl == nil {
+		typ := v.pass.TypesInfo.TypeOf(expr)
+		v.result[v.nest] = append(v.result[v.nest], typ.String())
+	} else {
+		dec, _ := expr.Obj.Decl.(*ast.TypeSpec)
+		if dec == nil || dec.Type == nil {
+			return
+		}
+		switch dec := dec.Type.(type) {
+		case *ast.InterfaceType:
+			res := InterfaceVisitor(v.name, dec, v.pass)
+			for _, typ := range res.Result {
+				v.result[v.nest] = append(v.result[v.nest], typ)
+			}
+		case *ast.Ident:
+			typ := v.pass.TypesInfo.TypeOf(dec)
+			v.result[v.nest] = append(v.result[v.nest], typ.String())
+		}
+	}
+}
+
+func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
+	if expr.Op != token.TILDE {
+		return
+	}
+
+	exprX, _ := expr.X.(*ast.Ident)
+	if exprX == nil {
+		return
+	}
+
+	typ := v.pass.TypesInfo.TypeOf(exprX)
+	v.result[v.nest] = append(v.result[v.nest], fmt.Sprintf("~%s", typ.String()))
 }

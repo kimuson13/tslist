@@ -3,7 +3,7 @@ package main
 import (
 	"tslist"
 
-	"golang.org/x/tools/go/analysis/unitchecker"
+	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
-func main() { unitchecker.Main(tslist.Analyzer) }
+func main() { singlechecker.Main(tslist.Analyzer) }
