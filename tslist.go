@@ -194,40 +194,6 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 	}
 }
 
-func (v *Visitor) params(fields []*ast.Field) []value {
-	values := make([]value, 0, len(fields))
-	for _, field := range fields {
-		if field.Names == nil {
-			typ := v.pass.TypesInfo.TypeOf(field.Type)
-			values = append(values, value{"", typ.String()})
-			continue
-		}
-
-		for _, fieldName := range field.Names {
-			typ := v.pass.TypesInfo.TypeOf(fieldName)
-			values = append(values, value{fieldName.Name, typ.String()})
-		}
-	}
-
-	return values
-}
-
-func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
-	v.nest--
-	var methodResult MethodResult
-	if expr.Params != nil && expr.Params.List != nil {
-		values := v.params(expr.Params.List)
-		methodResult.inputs = values
-	}
-
-	if expr.Results != nil && expr.Results.List != nil {
-		values := v.params(expr.Results.List)
-		methodResult.outputs = values
-	}
-
-	v.methodResults = append(v.methodResults, methodResult)
-}
-
 func (v *Visitor) identVisitor(expr *ast.Ident) {
 	if expr.Obj == nil || expr.Obj.Decl == nil {
 		typ := v.pass.TypesInfo.TypeOf(expr)
@@ -262,4 +228,38 @@ func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 
 	typ := v.pass.TypesInfo.TypeOf(exprX)
 	v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("~%s", typ.String()))
+}
+
+func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
+	v.nest--
+	var methodResult MethodResult
+	if expr.Params != nil && expr.Params.List != nil {
+		values := v.params(expr.Params.List)
+		methodResult.inputs = values
+	}
+
+	if expr.Results != nil && expr.Results.List != nil {
+		values := v.params(expr.Results.List)
+		methodResult.outputs = values
+	}
+
+	v.methodResults = append(v.methodResults, methodResult)
+}
+
+func (v *Visitor) params(fields []*ast.Field) []value {
+	values := make([]value, 0, len(fields))
+	for _, field := range fields {
+		if field.Names == nil {
+			typ := v.pass.TypesInfo.TypeOf(field.Type)
+			values = append(values, value{"", typ.String()})
+			continue
+		}
+
+		for _, fieldName := range field.Names {
+			typ := v.pass.TypesInfo.TypeOf(fieldName)
+			values = append(values, value{fieldName.Name, typ.String()})
+		}
+	}
+
+	return values
 }
