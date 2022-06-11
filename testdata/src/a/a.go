@@ -25,6 +25,7 @@ type i2 interface { // want "[int string]"
 type i3 interface { // want "no type"
 	f1()
 	f2(val int) string
+	f3(val int) (string, bool)
 }
 
 type i4 interface{} // want "[any]"

@@ -25,15 +25,25 @@ type Visitor struct {
 	nest          int
 	pass          *analysis.Pass
 	interfaceName string
-	methodNames   string
-	methodResults []string
+	methodNames   []string
+	methodResults []MethodResult
 	typeResults   map[int][]string
+}
+
+type MethodResult struct {
+	inputs  []value
+	outputs []value
+}
+
+type value struct {
+	name     string
+	typeName string
 }
 
 type VisitorResult struct {
 	Pos           token.Pos
 	Name          string
-	MethodResults []string
+	MethodResults map[string]MethodResult
 	TypeResults   []string
 }
 
@@ -71,6 +81,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				}
 
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
+				fmt.Println(res)
 				if len(res.TypeResults) == 0 {
 					pass.Reportf(res.Pos, "no type")
 					fmt.Printf("%s: no type set\n", res.Name)
@@ -92,8 +103,9 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	visit.interfaceVisitor(interfaceType)
 
 	res := visit.parseTypeSet()
+	methodMap := visit.parseMethodList()
 
-	return VisitorResult{interfaceType.Pos(), name, res, res}
+	return VisitorResult{interfaceType.Pos(), name, methodMap, res}
 }
 
 func (v *Visitor) parseTypeSet() []string {
@@ -140,6 +152,15 @@ func (v *Visitor) parseTypeSet() []string {
 	return res
 }
 
+func (v *Visitor) parseMethodList() map[string]MethodResult {
+	methodMap := make(map[string]MethodResult)
+	for i, name := range v.methodNames {
+		methodMap[name] = v.methodResults[i]
+	}
+
+	return methodMap
+}
+
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 	if expr.Methods == nil {
 		return
@@ -152,6 +173,9 @@ func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 
 	for _, field := range expr.Methods.List {
 		v.nest++
+		for _, name := range field.Names {
+			v.methodNames = append(v.methodNames, name.Name)
+		}
 		v.exprVisitor(field.Type)
 	}
 }
@@ -166,9 +190,42 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 	case *ast.UnaryExpr:
 		v.unaryVisitor(expr)
 	case *ast.FuncType:
-		v.nest--
-
+		v.funcTypeVisitor(expr)
 	}
+}
+
+func (v *Visitor) params(fields []*ast.Field) []value {
+	values := make([]value, 0, len(fields))
+	for _, field := range fields {
+		if field.Names == nil {
+			typ := v.pass.TypesInfo.TypeOf(field.Type)
+			values = append(values, value{"", typ.String()})
+			continue
+		}
+
+		for _, fieldName := range field.Names {
+			typ := v.pass.TypesInfo.TypeOf(fieldName)
+			values = append(values, value{fieldName.Name, typ.String()})
+		}
+	}
+
+	return values
+}
+
+func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
+	v.nest--
+	var methodResult MethodResult
+	if expr.Params != nil && expr.Params.List != nil {
+		values := v.params(expr.Params.List)
+		methodResult.inputs = values
+	}
+
+	if expr.Results != nil && expr.Results.List != nil {
+		values := v.params(expr.Results.List)
+		methodResult.outputs = values
+	}
+
+	v.methodResults = append(v.methodResults, methodResult)
 }
 
 func (v *Visitor) identVisitor(expr *ast.Ident) {
