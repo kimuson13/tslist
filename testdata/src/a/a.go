@@ -27,6 +27,7 @@ type i3 interface { // want "no type"
 	f2(val int, hoge string) string
 	f3(val int) (string, bool)
 	f4(val int) (res int)
+	f5(val []string, ptr *int)
 }
 
 type i4 interface{} // want "[any]"
@@ -81,7 +82,7 @@ type s1 struct {
 	val int
 }
 
-type i14 interface { // want "[[]string a.s1]"
+type i14 interface { // want `[[]string a.s1]`
 	s1 | []string
 }
 
