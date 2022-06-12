@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"golang.org/x/exp/typeparams"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 )
@@ -22,16 +23,37 @@ const (
 )
 
 type Visitor struct {
-	nest   int
-	pass   *analysis.Pass
-	name   string
-	result map[int][]string
+	nest          int
+	pass          *analysis.Pass
+	interfaceName string
+	methodNames   []string
+	methodResults []MethodResult
+	typeResults   map[int][]string
+}
+
+type MethodResult struct {
+	inputs  []value
+	outputs []value
+}
+
+type value struct {
+	name     string
+	typeName string
+}
+
+func (v value) isNoName() bool {
+	if v.name == "" {
+		return true
+	}
+
+	return false
 }
 
 type VisitorResult struct {
-	Pos    token.Pos
-	Name   string
-	Result []string
+	Pos           token.Pos
+	Name          string
+	MethodResults map[string]MethodResult
+	TypeResults   []string
 }
 
 type Result struct {
@@ -67,36 +89,85 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
+				typ := pass.TypesInfo.TypeOf(interfaceType)
+				terms, err := typeparams.NormalTerms(typ)
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					fmt.Println(terms)
+				}
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
-				if len(res.Result) == 0 {
+				for name, values := range res.MethodResults {
+					format := name
+					if len(values.inputs) == 0 {
+						format += " ()"
+					} else {
+						format = addValues(format, values.inputs)
+					}
+					if len(values.outputs) == 1 {
+						if values.outputs[0].isNoName() {
+							format += fmt.Sprintf(" %s", values.outputs[0].typeName)
+						} else {
+							format += fmt.Sprintf(" (%s %s)", values.outputs[0].name, values.outputs[0].typeName)
+						}
+					} else {
+						format = addValues(format, values.outputs)
+					}
+					fmt.Println(format)
+				}
+				if len(res.TypeResults) == 0 {
 					pass.Reportf(res.Pos, "no type")
 					fmt.Printf("%s: no type set\n", res.Name)
 				} else {
-					sort.Slice(res.Result, func(i, j int) bool { return res.Result[i] < res.Result[j] })
-					pass.Reportf(res.Pos, "%v", res.Result)
-					fmt.Printf("%s: %v\n", res.Name, res.Result)
+					sort.Slice(res.TypeResults, func(i, j int) bool { return res.TypeResults[i] < res.TypeResults[j] })
+					pass.Reportf(res.Pos, "%v", res.TypeResults)
+					fmt.Printf("%s: %v\n", res.Name, res.TypeResults)
 				}
 			}
 		}
 	}
-
 	return nil, nil
+}
+
+func addValues(format string, values []value) string {
+	format += " ("
+	for i, value := range values {
+		if i == len(values)-1 {
+			format = addValue(format, value)
+		} else {
+			format = addValue(format, value)
+			format += ", "
+		}
+	}
+
+	format += ")"
+	return format
+}
+
+func addValue(format string, value value) string {
+	if value.isNoName() {
+		format += value.typeName
+		return format
+	}
+	format += fmt.Sprintf("%s %s", value.name, value.typeName)
+	return format
 }
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
 	mp := make(map[int][]string)
-	visit := Visitor{pass: pass, name: name, result: mp}
+	visit := Visitor{pass: pass, interfaceName: name, typeResults: mp}
 	visit.interfaceVisitor(interfaceType)
 
 	res := visit.parseTypeSet()
+	methodMap := visit.parseMethodList()
 
-	return VisitorResult{interfaceType.Pos(), name, res}
+	return VisitorResult{interfaceType.Pos(), name, methodMap, res}
 }
 
 func (v *Visitor) parseTypeSet() []string {
 	typeSet := make(map[string]int)
 	// union
-	for _, results := range v.result {
+	for _, results := range v.typeResults {
 		if lo.Contains(results, ANY) {
 			typeSet[ANY]++
 			continue
@@ -137,6 +208,15 @@ func (v *Visitor) parseTypeSet() []string {
 	return res
 }
 
+func (v *Visitor) parseMethodList() map[string]MethodResult {
+	methodMap := make(map[string]MethodResult)
+	for i, name := range v.methodNames {
+		methodMap[name] = v.methodResults[i]
+	}
+
+	return methodMap
+}
+
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 	if expr.Methods == nil {
 		return
@@ -144,11 +224,14 @@ func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
 
 	if expr.Methods.List == nil {
 		v.nest++
-		v.result[v.nest] = append(v.result[v.nest], ANY)
+		v.typeResults[v.nest] = append(v.typeResults[v.nest], ANY)
 	}
 
 	for _, field := range expr.Methods.List {
 		v.nest++
+		for _, name := range field.Names {
+			v.methodNames = append(v.methodNames, name.Name)
+		}
 		v.exprVisitor(field.Type)
 	}
 }
@@ -163,14 +246,14 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 	case *ast.UnaryExpr:
 		v.unaryVisitor(expr)
 	case *ast.FuncType:
-		v.nest--
+		v.funcTypeVisitor(expr)
 	}
 }
 
 func (v *Visitor) identVisitor(expr *ast.Ident) {
 	if expr.Obj == nil || expr.Obj.Decl == nil {
 		typ := v.pass.TypesInfo.TypeOf(expr)
-		v.result[v.nest] = append(v.result[v.nest], typ.String())
+		v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
 	} else {
 		dec, _ := expr.Obj.Decl.(*ast.TypeSpec)
 		if dec == nil || dec.Type == nil {
@@ -178,13 +261,13 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 		}
 		switch dec := dec.Type.(type) {
 		case *ast.InterfaceType:
-			res := InterfaceVisitor(v.name, dec, v.pass)
-			for _, typ := range res.Result {
-				v.result[v.nest] = append(v.result[v.nest], typ)
+			res := InterfaceVisitor(v.interfaceName, dec, v.pass)
+			for _, typ := range res.TypeResults {
+				v.typeResults[v.nest] = append(v.typeResults[v.nest], typ)
 			}
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)
-			v.result[v.nest] = append(v.result[v.nest], typ.String())
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
 		}
 	}
 }
@@ -200,5 +283,39 @@ func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 	}
 
 	typ := v.pass.TypesInfo.TypeOf(exprX)
-	v.result[v.nest] = append(v.result[v.nest], fmt.Sprintf("~%s", typ.String()))
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("~%s", typ.String()))
+}
+
+func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
+	v.nest--
+	var methodResult MethodResult
+	if expr.Params != nil && expr.Params.List != nil {
+		values := v.params(expr.Params.List)
+		methodResult.inputs = values
+	}
+
+	if expr.Results != nil && expr.Results.List != nil {
+		values := v.params(expr.Results.List)
+		methodResult.outputs = values
+	}
+
+	v.methodResults = append(v.methodResults, methodResult)
+}
+
+func (v *Visitor) params(fields []*ast.Field) []value {
+	values := make([]value, 0, len(fields))
+	for _, field := range fields {
+		if field.Names == nil {
+			typ := v.pass.TypesInfo.TypeOf(field.Type)
+			values = append(values, value{"", typ.String()})
+			continue
+		}
+
+		for _, fieldName := range field.Names {
+			typ := v.pass.TypesInfo.TypeOf(fieldName)
+			values = append(values, value{fieldName.Name, typ.String()})
+		}
+	}
+
+	return values
 }
