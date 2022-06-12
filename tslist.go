@@ -100,21 +100,13 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	visit := Visitor{pass: pass, interfaceName: name, typeResults: make(map[int][]string)}
 	visit.interfaceVisitor(interfaceType)
 
-	res := visit.parseTypeSet()
+	typeSet := visit.parseTypeSet()
 	visit.parseMethodList()
-
-	// set result process
-	typeSet := make([]TypeValue, 0, len(res))
-	for _, name := range res {
-		if typ, ok := mp[name]; ok {
-			typeSet = append(typeSet, TypeValue{name, typ})
-		}
-	}
 
 	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSet: typeSet, Methods: visit.methodResults}
 }
 
-func (v *Visitor) parseTypeSet() []string {
+func (v *Visitor) parseTypeSet() []TypeValue {
 	typeSet := make(map[string]int)
 	// union
 	for _, results := range v.typeResults {
@@ -128,11 +120,15 @@ func (v *Visitor) parseTypeSet() []string {
 		}
 	}
 
-	res := make([]string, 0, len(typeSet))
+	res := make([]TypeValue, 0, len(typeSet))
 	// intersection
 	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
-			res = append(res, ANY)
+			if typ, ok := mp[ANY]; ok {
+				res = append(res, TypeValue{ANY, typ})
+				return res
+			}
+			res = append(res, TypeValue{Name: ANY})
 			return res
 		}
 
@@ -149,9 +145,11 @@ func (v *Visitor) parseTypeSet() []string {
 		}
 	}
 
-	for typ, num := range typeSet {
+	for typeName, num := range typeSet {
 		if num == v.nest {
-			res = append(res, typ)
+			if typ, ok := mp[typeName]; ok {
+				res = append(res, TypeValue{typeName, typ})
+			}
 		}
 	}
 
@@ -195,15 +193,9 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 	case *ast.FuncType:
 		v.funcTypeVisitor(expr)
 	case *ast.StarExpr:
-		typ := v.pass.TypesInfo.TypeOf(expr.X)
-		name := fmt.Sprintf("*%s", typ.String())
-		addType(name, typ)
-		v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
+		v.starExprVisitor(expr)
 	case *ast.ArrayType:
-		typ := v.pass.TypesInfo.TypeOf(expr.Elt)
-		name := fmt.Sprintf("[]%s", typ.String())
-		addType(name, typ)
-		v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
+		v.arrayTypeVisitor(expr)
 	}
 }
 
@@ -266,6 +258,20 @@ func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
 	}
 
 	v.methodResults = append(v.methodResults, method)
+}
+
+func (v *Visitor) starExprVisitor(expr *ast.StarExpr) {
+	typ := v.pass.TypesInfo.TypeOf(expr.X)
+	name := fmt.Sprintf("*%s", typ.String())
+	addType(name, typ)
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
+}
+
+func (v *Visitor) arrayTypeVisitor(expr *ast.ArrayType) {
+	typ := v.pass.TypesInfo.TypeOf(expr.Elt)
+	name := fmt.Sprintf("[]%s", typ.String())
+	addType(name, typ)
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 }
 
 func (v *Visitor) params(fields []*ast.Field) []TypeValue {
