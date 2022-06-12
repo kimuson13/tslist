@@ -86,13 +86,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
-				// typ := pass.TypesInfo.TypeOf(interfaceType)
-				// terms, err := typeparams.NormalTerms(typ)
-				// if err != nil {
-				// 	fmt.Println(err)
-				// } else {
-				// 	fmt.Println(terms)
-				// }
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
 				result.Results = append(result.Results, res)
 				fmt.Println(res)
@@ -101,30 +94,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	return &result, nil
-}
-
-func addValues(format string, values []value) string {
-	format += " ("
-	for i, value := range values {
-		if i == len(values)-1 {
-			format = addValue(format, value)
-		} else {
-			format = addValue(format, value)
-			format += ", "
-		}
-	}
-
-	format += ")"
-	return format
-}
-
-func addValue(format string, value value) string {
-	if value.isNoName() {
-		format += value.typeName
-		return format
-	}
-	format += fmt.Sprintf("%s %s", value.name, value.typeName)
-	return format
 }
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
