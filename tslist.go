@@ -247,6 +247,9 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 		v.unaryVisitor(expr)
 	case *ast.FuncType:
 		v.funcTypeVisitor(expr)
+	case *ast.ArrayType:
+		typ := v.pass.TypesInfo.TypeOf(expr.Elt)
+		v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("[]%s", typ.String()))
 	}
 }
 
@@ -268,6 +271,8 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)
 			v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
+		case *ast.StructType:
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], expr.Name)
 		}
 	}
 }

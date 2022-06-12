@@ -76,3 +76,11 @@ type i13 interface { // want "[int]"
 	string | bool | any | ~float64
 	int
 }
+
+type s1 struct {
+	val int
+}
+
+type i14 interface { // want "[[]string s1]"
+	s1 | []string
+}
