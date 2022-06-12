@@ -27,36 +27,11 @@ type Visitor struct {
 	pass          *analysis.Pass
 	interfaceName string
 	methodNames   []string
-	methodResults []MethodResult
+	methodResults []Method
 	typeResults   map[int][]string
 }
 
-type MethodResult struct {
-	inputs  []value
-	outputs []value
-}
-
-type value struct {
-	name     string
-	typeName string
-}
-
-func (v value) isNoName() bool {
-	if v.name == "" {
-		return true
-	}
-
-	return false
-}
-
 type VisitorResult struct {
-	Pos     token.Pos
-	Name    string
-	TypeSet []TypeValue
-	Methods []Method
-}
-
-type AnalizeResult struct {
 	Pos     token.Pos
 	Name    string
 	TypeSet []TypeValue
@@ -157,7 +132,7 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	visit.interfaceVisitor(interfaceType)
 
 	res := visit.parseTypeSet()
-	methodMap := visit.parseMethodList()
+	visit.parseMethodList()
 
 	// set result process
 	typeSet := make([]TypeValue, 0, len(res))
@@ -167,26 +142,7 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 		}
 	}
 
-	methods := make([]Method, 0, len(methodMap))
-	for name, value := range methodMap {
-		method := Method{Name: name}
-		args, outputs := make([]TypeValue, 0, len(value.inputs)), make([]TypeValue, 0, len(value.outputs))
-		for _, arg := range value.inputs {
-			if typ, ok := mp[arg.name]; ok {
-				args = append(args, TypeValue{arg.name, typ})
-			}
-		}
-
-		for _, output := range value.outputs {
-			if typ, ok := mp[output.name]; ok {
-				outputs = append(outputs, TypeValue{output.name, typ})
-			}
-		}
-
-		methods = append(methods, method)
-	}
-
-	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSet: typeSet, Methods: methods}
+	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSet: typeSet, Methods: visit.methodResults}
 }
 
 func (v *Visitor) parseTypeSet() []string {
@@ -233,13 +189,10 @@ func (v *Visitor) parseTypeSet() []string {
 	return res
 }
 
-func (v *Visitor) parseMethodList() map[string]MethodResult {
-	methodMap := make(map[string]MethodResult)
+func (v *Visitor) parseMethodList() {
 	for i, name := range v.methodNames {
-		methodMap[name] = v.methodResults[i]
+		v.methodResults[i].Name = name
 	}
-
-	return methodMap
 }
 
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
@@ -314,12 +267,6 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 	}
 }
 
-func addType(name string, typ types.Type) {
-	if _, ok := mp[name]; !ok {
-		mp[name] = typ
-	}
-}
-
 func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 	if expr.Op != token.TILDE {
 		return
@@ -338,34 +285,40 @@ func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 
 func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
 	v.nest--
-	var methodResult MethodResult
+	var method Method
 	if expr.Params != nil && expr.Params.List != nil {
 		values := v.params(expr.Params.List)
-		methodResult.inputs = values
+		method.Args = values
 	}
 
 	if expr.Results != nil && expr.Results.List != nil {
 		values := v.params(expr.Results.List)
-		methodResult.outputs = values
+		method.Outputs = values
 	}
 
-	v.methodResults = append(v.methodResults, methodResult)
+	v.methodResults = append(v.methodResults, method)
 }
 
-func (v *Visitor) params(fields []*ast.Field) []value {
-	values := make([]value, 0, len(fields))
+func (v *Visitor) params(fields []*ast.Field) []TypeValue {
+	values := make([]TypeValue, 0, len(fields))
 	for _, field := range fields {
 		if field.Names == nil {
 			typ := v.pass.TypesInfo.TypeOf(field.Type)
-			values = append(values, value{"", typ.String()})
+			values = append(values, TypeValue{typ.String(), typ})
 			continue
 		}
 
 		for _, fieldName := range field.Names {
 			typ := v.pass.TypesInfo.TypeOf(fieldName)
-			values = append(values, value{fieldName.Name, typ.String()})
+			values = append(values, TypeValue{typ.String(), typ})
 		}
 	}
 
 	return values
+}
+
+func addType(name string, typ types.Type) {
+	if _, ok := mp[name]; !ok {
+		mp[name] = typ
+	}
 }
