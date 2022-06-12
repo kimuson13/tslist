@@ -217,8 +217,8 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 			}
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)
-			addType(typ.String(), typ)
-			v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
+			addType(expr.Name, typ)
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], expr.Name)
 		case *ast.StructType:
 			typ := v.pass.TypesInfo.TypeOf(dec)
 			name := fmt.Sprintf("%s.%s", v.pass.Pkg.Name(), expr.Name)

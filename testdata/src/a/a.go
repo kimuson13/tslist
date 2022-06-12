@@ -9,7 +9,7 @@ type i interface { // want "no type"
 	MyMyInt
 }
 
-type i0 interface { // want "[a.MyInt int]"
+type i0 interface { // want "[MyInt MyMyInt]"
 	MyInt | MyMyInt
 }
 
@@ -86,6 +86,10 @@ type i14 interface { // want `[[]string a.s1]`
 	s1 | []string
 }
 
-type i15 interface { // want [*int]
+type i15 interface { // want "[*int]"
 	*int
+}
+
+type i16 interface { // want "[int MyInt]"
+	int | MyInt
 }
