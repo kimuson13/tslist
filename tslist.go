@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"golang.org/x/exp/typeparams"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 )
@@ -38,6 +39,14 @@ type MethodResult struct {
 type value struct {
 	name     string
 	typeName string
+}
+
+func (v value) isNoName() bool {
+	if v.name == "" {
+		return true
+	}
+
+	return false
 }
 
 type VisitorResult struct {
@@ -80,8 +89,32 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
+				typ := pass.TypesInfo.TypeOf(interfaceType)
+				terms, err := typeparams.NormalTerms(typ)
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					fmt.Println(terms)
+				}
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
-				fmt.Println(res)
+				for name, values := range res.MethodResults {
+					format := name
+					if len(values.inputs) == 0 {
+						format += " ()"
+					} else {
+						format = addValues(format, values.inputs)
+					}
+					if len(values.outputs) == 1 {
+						if values.outputs[0].isNoName() {
+							format += fmt.Sprintf(" %s", values.outputs[0].typeName)
+						} else {
+							format += fmt.Sprintf(" (%s %s)", values.outputs[0].name, values.outputs[0].typeName)
+						}
+					} else {
+						format = addValues(format, values.outputs)
+					}
+					fmt.Println(format)
+				}
 				if len(res.TypeResults) == 0 {
 					pass.Reportf(res.Pos, "no type")
 					fmt.Printf("%s: no type set\n", res.Name)
@@ -93,8 +126,31 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			}
 		}
 	}
-
 	return nil, nil
+}
+
+func addValues(format string, values []value) string {
+	format += " ("
+	for i, value := range values {
+		if i == len(values)-1 {
+			format = addValue(format, value)
+		} else {
+			format = addValue(format, value)
+			format += ", "
+		}
+	}
+
+	format += ")"
+	return format
+}
+
+func addValue(format string, value value) string {
+	if value.isNoName() {
+		format += value.typeName
+		return format
+	}
+	format += fmt.Sprintf("%s %s", value.name, value.typeName)
+	return format
 }
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
