@@ -81,7 +81,7 @@ type s1 struct {
 	val int
 }
 
-type i14 interface { // want "[[]string s1]"
+type i14 interface { // want "[[]string a.s1]"
 	s1 | []string
 }
 

@@ -275,7 +275,7 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 			typ := v.pass.TypesInfo.TypeOf(dec)
 			v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
 		case *ast.StructType:
-			v.typeResults[v.nest] = append(v.typeResults[v.nest], expr.Name)
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("%s.%s", v.pass.Pkg.Name(), expr.Name))
 		}
 	}
 }
