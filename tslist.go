@@ -247,6 +247,9 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 		v.unaryVisitor(expr)
 	case *ast.FuncType:
 		v.funcTypeVisitor(expr)
+	case *ast.StarExpr:
+		typ := v.pass.TypesInfo.TypeOf(expr.X)
+		v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("*%s", typ.String()))
 	case *ast.ArrayType:
 		typ := v.pass.TypesInfo.TypeOf(expr.Elt)
 		v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("[]%s", typ.String()))

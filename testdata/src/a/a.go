@@ -84,3 +84,7 @@ type s1 struct {
 type i14 interface { // want "[[]string s1]"
 	s1 | []string
 }
+
+type i15 interface { // want [*int]
+	*int
+}
