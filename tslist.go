@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"sort"
 	"strings"
 
@@ -56,8 +57,26 @@ type VisitorResult struct {
 	TypeResults   []string
 }
 
+type AnalizeResult struct {
+	Pos     token.Pos
+	Name    string
+	TypeSet []types.Type
+	Methods []Method
+}
+
+type Method struct {
+	Name    string
+	Args    []TypeValue
+	Outputs []TypeValue
+}
+
+type TypeValue struct {
+	Name string
+	Typ  types.Type
+}
+
 type Result struct {
-	Results []VisitorResult
+	Results []AnalizeResult
 }
 
 // Analyzer is ...
