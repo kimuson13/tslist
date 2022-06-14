@@ -88,9 +88,18 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
 				result.Results = append(result.Results, res)
-				fmt.Println(res)
 			}
 		}
+	}
+
+	for _, res := range result.Results {
+		ts := typeSetPrint(res)
+		methodList := methodListPrint(res)
+		format := fmt.Sprintf("\n%s\ntype set: %v\nmethod list:\n", res.Name, ts)
+		for _, method := range methodList {
+			format += fmt.Sprintf("%s\n", method)
+		}
+		pass.Reportf(res.Pos, format)
 	}
 
 	return &result, nil
@@ -279,13 +288,13 @@ func (v *Visitor) params(fields []*ast.Field) []TypeValue {
 	for _, field := range fields {
 		if field.Names == nil {
 			typ := v.pass.TypesInfo.TypeOf(field.Type)
-			values = append(values, TypeValue{typ.String(), typ})
+			values = append(values, TypeValue{"", typ})
 			continue
 		}
 
 		for _, fieldName := range field.Names {
 			typ := v.pass.TypesInfo.TypeOf(fieldName)
-			values = append(values, TypeValue{typ.String(), typ})
+			values = append(values, TypeValue{fieldName.Name, typ})
 		}
 	}
 

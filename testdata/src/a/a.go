@@ -4,21 +4,21 @@ type MyInt int
 
 type MyMyInt MyInt
 
-type i interface { // want "no type"
+type i interface { // want "i\ntype set: empty\nmethod list:"
 	MyInt
 	MyMyInt
 }
 
-type i0 interface { // want "[MyInt MyMyInt]"
+type i0 interface { // want "i0\ntype set: [MyInt MyMyInt]\nmethod list"
 	MyInt | MyMyInt
 }
 
-type i1 interface { // want "no type"
+type i1 interface { // want "i1\ntype set: empty\nmethod list:"
 	int
 	float64
 }
 
-type i2 interface { // want "[int string]"
+type i2 interface { // want "i2\ntype set: [int string]\nmethod list:"
 	int | string
 }
 
@@ -28,6 +28,7 @@ type i3 interface { // want "no type"
 	f3(val int) (string, bool)
 	f4(val int) (res int)
 	f5(val []string, ptr *int)
+	f6(val string) (res string)
 }
 
 type i4 interface{} // want "[any]"
@@ -92,4 +93,9 @@ type i15 interface { // want "[*int]"
 
 type i16 interface { // want "[int MyInt]"
 	int | MyInt
+}
+
+type i17 interface { // want "empty"
+	int
+	MyInt
 }
