@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/gostaticanalysis/testutil v0.4.0
 	github.com/samber/lo v1.21.0
-	golang.org/x/exp/typeparams v0.0.0-20220609121020-a51bd0440498
 	golang.org/x/tools v0.1.10
 )
 

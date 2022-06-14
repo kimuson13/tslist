@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"sort"
+	"go/types"
+	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/samber/lo"
-	"golang.org/x/exp/typeparams"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 )
@@ -27,33 +28,28 @@ type Visitor struct {
 	pass          *analysis.Pass
 	interfaceName string
 	methodNames   []string
-	methodResults []MethodResult
+	methodResults []Method
+	mp            map[string]types.Type
+	mu            sync.Mutex
 	typeResults   map[int][]string
 }
 
-type MethodResult struct {
-	inputs  []value
-	outputs []value
-}
-
-type value struct {
-	name     string
-	typeName string
-}
-
-func (v value) isNoName() bool {
-	if v.name == "" {
-		return true
-	}
-
-	return false
-}
-
 type VisitorResult struct {
-	Pos           token.Pos
-	Name          string
-	MethodResults map[string]MethodResult
-	TypeResults   []string
+	Pos     token.Pos
+	Name    string
+	TypeSet []TypeValue
+	Methods []Method
+}
+
+type Method struct {
+	Name    string
+	Args    []TypeValue
+	Outputs []TypeValue
+}
+
+type TypeValue struct {
+	Name string
+	Typ  types.Type
 }
 
 type Result struct {
@@ -68,9 +64,11 @@ var Analyzer = &analysis.Analyzer{
 	Requires: []*analysis.Analyzer{
 		inspect.Analyzer,
 	},
+	ResultType: reflect.TypeOf(new(Result)),
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
+	var result Result
 	for _, f := range pass.Files {
 		for _, dec := range f.Decls {
 			dec, _ := dec.(*ast.GenDecl)
@@ -89,82 +87,36 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 
-				typ := pass.TypesInfo.TypeOf(interfaceType)
-				terms, err := typeparams.NormalTerms(typ)
-				if err != nil {
-					fmt.Println(err)
-				} else {
-					fmt.Println(terms)
-				}
 				res := InterfaceVisitor(spec.Name.Name, interfaceType, pass)
-				for name, values := range res.MethodResults {
-					format := name
-					if len(values.inputs) == 0 {
-						format += " ()"
-					} else {
-						format = addValues(format, values.inputs)
-					}
-					if len(values.outputs) == 1 {
-						if values.outputs[0].isNoName() {
-							format += fmt.Sprintf(" %s", values.outputs[0].typeName)
-						} else {
-							format += fmt.Sprintf(" (%s %s)", values.outputs[0].name, values.outputs[0].typeName)
-						}
-					} else {
-						format = addValues(format, values.outputs)
-					}
-					fmt.Println(format)
-				}
-				if len(res.TypeResults) == 0 {
-					pass.Reportf(res.Pos, "no type")
-					fmt.Printf("%s: no type set\n", res.Name)
-				} else {
-					sort.Slice(res.TypeResults, func(i, j int) bool { return res.TypeResults[i] < res.TypeResults[j] })
-					pass.Reportf(res.Pos, "%v", res.TypeResults)
-					fmt.Printf("%s: %v\n", res.Name, res.TypeResults)
-				}
+				result.Results = append(result.Results, res)
 			}
 		}
 	}
-	return nil, nil
-}
 
-func addValues(format string, values []value) string {
-	format += " ("
-	for i, value := range values {
-		if i == len(values)-1 {
-			format = addValue(format, value)
-		} else {
-			format = addValue(format, value)
-			format += ", "
+	for _, res := range result.Results {
+		ts := typeSetPrint(res)
+		methodList := methodListPrint(res)
+		format := fmt.Sprintf("\n%s\ntype set: %v\nmethod list:\n", res.Name, ts)
+		for _, method := range methodList {
+			format += fmt.Sprintf("%s\n", method)
 		}
+		pass.Reportf(res.Pos, format)
 	}
 
-	format += ")"
-	return format
-}
-
-func addValue(format string, value value) string {
-	if value.isNoName() {
-		format += value.typeName
-		return format
-	}
-	format += fmt.Sprintf("%s %s", value.name, value.typeName)
-	return format
+	return &result, nil
 }
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
-	mp := make(map[int][]string)
-	visit := Visitor{pass: pass, interfaceName: name, typeResults: mp}
+	visit := Visitor{pass: pass, interfaceName: name, typeResults: make(map[int][]string), mp: make(map[string]types.Type)}
 	visit.interfaceVisitor(interfaceType)
 
-	res := visit.parseTypeSet()
-	methodMap := visit.parseMethodList()
+	typeSet := visit.parseTypeSet()
+	visit.parseMethodList()
 
-	return VisitorResult{interfaceType.Pos(), name, methodMap, res}
+	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSet: typeSet, Methods: visit.methodResults}
 }
 
-func (v *Visitor) parseTypeSet() []string {
+func (v *Visitor) parseTypeSet() []TypeValue {
 	typeSet := make(map[string]int)
 	// union
 	for _, results := range v.typeResults {
@@ -178,11 +130,15 @@ func (v *Visitor) parseTypeSet() []string {
 		}
 	}
 
-	res := make([]string, 0, len(typeSet))
+	res := make([]TypeValue, 0, len(typeSet))
 	// intersection
 	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
-			res = append(res, ANY)
+			if typ, ok := v.mp[ANY]; ok {
+				res = append(res, TypeValue{ANY, typ})
+				return res
+			}
+			res = append(res, TypeValue{Name: ANY})
 			return res
 		}
 
@@ -199,22 +155,21 @@ func (v *Visitor) parseTypeSet() []string {
 		}
 	}
 
-	for typ, num := range typeSet {
+	for typeName, num := range typeSet {
 		if num == v.nest {
-			res = append(res, typ)
+			if typ, ok := v.mp[typeName]; ok {
+				res = append(res, TypeValue{typeName, typ})
+			}
 		}
 	}
 
 	return res
 }
 
-func (v *Visitor) parseMethodList() map[string]MethodResult {
-	methodMap := make(map[string]MethodResult)
+func (v *Visitor) parseMethodList() {
 	for i, name := range v.methodNames {
-		methodMap[name] = v.methodResults[i]
+		v.methodResults[i].Name = name
 	}
-
-	return methodMap
 }
 
 func (v *Visitor) interfaceVisitor(expr *ast.InterfaceType) {
@@ -247,12 +202,17 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 		v.unaryVisitor(expr)
 	case *ast.FuncType:
 		v.funcTypeVisitor(expr)
+	case *ast.StarExpr:
+		v.starExprVisitor(expr)
+	case *ast.ArrayType:
+		v.arrayTypeVisitor(expr)
 	}
 }
 
 func (v *Visitor) identVisitor(expr *ast.Ident) {
 	if expr.Obj == nil || expr.Obj.Decl == nil {
 		typ := v.pass.TypesInfo.TypeOf(expr)
+		v.addType(typ.String(), typ)
 		v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
 	} else {
 		dec, _ := expr.Obj.Decl.(*ast.TypeSpec)
@@ -262,12 +222,18 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 		switch dec := dec.Type.(type) {
 		case *ast.InterfaceType:
 			res := InterfaceVisitor(v.interfaceName, dec, v.pass)
-			for _, typ := range res.TypeResults {
-				v.typeResults[v.nest] = append(v.typeResults[v.nest], typ)
+			for _, ts := range res.TypeSet {
+				v.typeResults[v.nest] = append(v.typeResults[v.nest], ts.Name)
 			}
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)
-			v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
+			v.addType(expr.Name, typ)
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], expr.Name)
+		case *ast.StructType:
+			typ := v.pass.TypesInfo.TypeOf(dec)
+			name := fmt.Sprintf("%s.%s", v.pass.Pkg.Name(), expr.Name)
+			v.addType(name, typ)
+			v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 		}
 	}
 }
@@ -283,39 +249,63 @@ func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 	}
 
 	typ := v.pass.TypesInfo.TypeOf(exprX)
-	v.typeResults[v.nest] = append(v.typeResults[v.nest], fmt.Sprintf("~%s", typ.String()))
+	name := fmt.Sprintf("~%s", typ.String())
+	v.addType(name, typ)
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 }
 
 func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
 	v.nest--
-	var methodResult MethodResult
+	var method Method
 	if expr.Params != nil && expr.Params.List != nil {
 		values := v.params(expr.Params.List)
-		methodResult.inputs = values
+		method.Args = values
 	}
 
 	if expr.Results != nil && expr.Results.List != nil {
 		values := v.params(expr.Results.List)
-		methodResult.outputs = values
+		method.Outputs = values
 	}
 
-	v.methodResults = append(v.methodResults, methodResult)
+	v.methodResults = append(v.methodResults, method)
 }
 
-func (v *Visitor) params(fields []*ast.Field) []value {
-	values := make([]value, 0, len(fields))
+func (v *Visitor) starExprVisitor(expr *ast.StarExpr) {
+	typ := v.pass.TypesInfo.TypeOf(expr.X)
+	name := fmt.Sprintf("*%s", typ.String())
+	v.addType(name, typ)
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
+}
+
+func (v *Visitor) arrayTypeVisitor(expr *ast.ArrayType) {
+	typ := v.pass.TypesInfo.TypeOf(expr.Elt)
+	name := fmt.Sprintf("[]%s", typ.String())
+	v.addType(name, typ)
+	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
+}
+
+func (v *Visitor) params(fields []*ast.Field) []TypeValue {
+	values := make([]TypeValue, 0, len(fields))
 	for _, field := range fields {
 		if field.Names == nil {
 			typ := v.pass.TypesInfo.TypeOf(field.Type)
-			values = append(values, value{"", typ.String()})
+			values = append(values, TypeValue{"", typ})
 			continue
 		}
 
 		for _, fieldName := range field.Names {
 			typ := v.pass.TypesInfo.TypeOf(fieldName)
-			values = append(values, value{fieldName.Name, typ.String()})
+			values = append(values, TypeValue{fieldName.Name, typ})
 		}
 	}
 
 	return values
+}
+
+func (v *Visitor) addType(name string, typ types.Type) {
+	v.mu.Lock()
+	if _, ok := v.mp[name]; !ok {
+		v.mp[name] = typ
+	}
+	v.mu.Unlock()
 }
