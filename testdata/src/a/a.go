@@ -9,7 +9,7 @@ type i interface { // want "i\ntype set: empty\nmethod list:"
 	MyMyInt
 }
 
-type i0 interface { // want "i0\ntype set: [MyInt MyMyInt]\nmethod list"
+type i0 interface { // want "\ni0\ntype set: [MyInt MyMyInt]\nmethod list:\n"
 	MyInt | MyMyInt
 }
 
@@ -18,11 +18,11 @@ type i1 interface { // want "i1\ntype set: empty\nmethod list:"
 	float64
 }
 
-type i2 interface { // want "i2\ntype set: [int string]\nmethod list:"
+type i2 interface { // want "\ni2\ntype set: [int string]\nmethod list:"
 	int | string
 }
 
-type i3 interface { // want "no type"
+type i3 interface { // want "\ni3\ntype set: empty\nmethod list:\nf1() \nf2(val int, hoge string) string\nf3(val int) (string, bool) \nf4(val int)  (res int)\nf5(val []string, ptr *int) \nf6(val string)  (res string)\n"
 	f1()
 	f2(val int, hoge string) string
 	f3(val int) (string, bool)
