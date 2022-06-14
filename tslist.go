@@ -7,6 +7,7 @@ import (
 	"go/types"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/samber/lo"
 	"golang.org/x/tools/go/analysis"
@@ -28,6 +29,8 @@ type Visitor struct {
 	interfaceName string
 	methodNames   []string
 	methodResults []Method
+	mp            map[string]types.Type
+	mu            sync.Mutex
 	typeResults   map[int][]string
 }
 
@@ -63,8 +66,6 @@ var Analyzer = &analysis.Analyzer{
 	},
 	ResultType: reflect.TypeOf(new(Result)),
 }
-
-var mp = make(map[string]types.Type)
 
 func run(pass *analysis.Pass) (interface{}, error) {
 	var result Result
@@ -106,7 +107,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 }
 
 func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analysis.Pass) VisitorResult {
-	visit := Visitor{pass: pass, interfaceName: name, typeResults: make(map[int][]string)}
+	visit := Visitor{pass: pass, interfaceName: name, typeResults: make(map[int][]string), mp: make(map[string]types.Type)}
 	visit.interfaceVisitor(interfaceType)
 
 	typeSet := visit.parseTypeSet()
@@ -133,7 +134,7 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 	// intersection
 	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
-			if typ, ok := mp[ANY]; ok {
+			if typ, ok := v.mp[ANY]; ok {
 				res = append(res, TypeValue{ANY, typ})
 				return res
 			}
@@ -156,7 +157,7 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 
 	for typeName, num := range typeSet {
 		if num == v.nest {
-			if typ, ok := mp[typeName]; ok {
+			if typ, ok := v.mp[typeName]; ok {
 				res = append(res, TypeValue{typeName, typ})
 			}
 		}
@@ -211,7 +212,7 @@ func (v *Visitor) exprVisitor(expr ast.Expr) {
 func (v *Visitor) identVisitor(expr *ast.Ident) {
 	if expr.Obj == nil || expr.Obj.Decl == nil {
 		typ := v.pass.TypesInfo.TypeOf(expr)
-		addType(typ.String(), typ)
+		v.addType(typ.String(), typ)
 		v.typeResults[v.nest] = append(v.typeResults[v.nest], typ.String())
 	} else {
 		dec, _ := expr.Obj.Decl.(*ast.TypeSpec)
@@ -226,12 +227,12 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 			}
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)
-			addType(expr.Name, typ)
+			v.addType(expr.Name, typ)
 			v.typeResults[v.nest] = append(v.typeResults[v.nest], expr.Name)
 		case *ast.StructType:
 			typ := v.pass.TypesInfo.TypeOf(dec)
 			name := fmt.Sprintf("%s.%s", v.pass.Pkg.Name(), expr.Name)
-			addType(name, typ)
+			v.addType(name, typ)
 			v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 		}
 	}
@@ -249,7 +250,7 @@ func (v *Visitor) unaryVisitor(expr *ast.UnaryExpr) {
 
 	typ := v.pass.TypesInfo.TypeOf(exprX)
 	name := fmt.Sprintf("~%s", typ.String())
-	addType(name, typ)
+	v.addType(name, typ)
 	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 }
 
@@ -272,14 +273,14 @@ func (v *Visitor) funcTypeVisitor(expr *ast.FuncType) {
 func (v *Visitor) starExprVisitor(expr *ast.StarExpr) {
 	typ := v.pass.TypesInfo.TypeOf(expr.X)
 	name := fmt.Sprintf("*%s", typ.String())
-	addType(name, typ)
+	v.addType(name, typ)
 	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 }
 
 func (v *Visitor) arrayTypeVisitor(expr *ast.ArrayType) {
 	typ := v.pass.TypesInfo.TypeOf(expr.Elt)
 	name := fmt.Sprintf("[]%s", typ.String())
-	addType(name, typ)
+	v.addType(name, typ)
 	v.typeResults[v.nest] = append(v.typeResults[v.nest], name)
 }
 
@@ -301,8 +302,10 @@ func (v *Visitor) params(fields []*ast.Field) []TypeValue {
 	return values
 }
 
-func addType(name string, typ types.Type) {
-	if _, ok := mp[name]; !ok {
-		mp[name] = typ
+func (v *Visitor) addType(name string, typ types.Type) {
+	v.mu.Lock()
+	if _, ok := v.mp[name]; !ok {
+		v.mp[name] = typ
 	}
+	v.mu.Unlock()
 }
