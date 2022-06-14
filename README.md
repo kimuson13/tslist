@@ -1,35 +1,27 @@
 # tslist
-Tool: show type set values
+tslist shows the list about types satisfied by type sets
+## Caution
+## Install
+## Situation to use
+### type sets satisfy in 
+## How to use
+### tslist
+### tslist.InterfaceVisitor
+You input *ast.InterfaceType to tslist.InterfaceVisitor, so you got type sets and method list.
+The return value type is `VisitorResult`. This struct has 4 fields below.
+| field name | type | about |
+| ---- | ---- | ---- | 
+|  Pos  |  token.Pos(int)  | interface declaration position |
+|  Name  |  string  | interface name(e.g. Stringer) |
+| TypeSets | []TypeValue | type sets |
+| Methods | []Method | method list |
 
+TypeValue:
+| field name | type | about |
+| ---- | ---- | ---- |
+| Name | string | identifier name. not type name |
+| Type | types.Type | type's info |
 
-memo:
-- どのような手順で作成したか
-    - まずはreportで出したい情報が取れているか確認
-    - type setとmethod listは別として捉えた。
-        - 両方あると、型がメソッドを持たない場合は満たさなくなってしまい、コンパイルエラーになる。
-    - そこから構造体で保持 
-- つまりポイント
-    - golang.org/x/tools/go/analysis/analysistestがgenerics対応していない？？
-        - だいたいpassになる
-        - 埋め込み系が同じなのに落ちる
-    - anyの扱い
-        - union内にあると、その行はanyになる。
-            - anyが含まれていたら、もうanyとして終わりにする
-        - リストの中にあると、どんな型とも共通点を持つものになる
-            - そのため、1行1行結果を確認しないと処理ができない。
-            - anyは行の深さとしての意味を持たないので、anyの数だけnestを減らしてanyはINFにして含まれないようにした。
-        - 結果の持ち方をどうしたか
-- なぜsinglecheckerか
-    - linterではないので、singlecheckerとしての方が使い勝手がよさそうだから。
-- なぜパッケージとして公開したのか
-    - genericsの型セットが結局何を持っているのかは、今後generics関連の静的解析を行う上でずっと出てきそうだと思ったから
-- どういう仕組みで解析したかも書く
-    - 再帰多めでやっている。
-        - なので、でかいinterface相手にやると、時間がかかるかも。いい方法はないものか。
-- 考慮しなくてよかったところ
-    - ~はユーザー定義型には使えないので、 unaryExprはIdentしか来ない想定にした。
-    - Ident内のObjectを持っていたときの場合でも、~が型定義には使えないので、無視するようにした。(今後使えるようになるかも)
-    - BinaryExpr内で、`~int | int`みたいに重複していたらコンパイルエラーになるので、そこは考えずに済んだ。(優秀だ.....)
-- 注意点
-    - mapで制御しているため、Result.Resultの結果は確定ではないところ
-    - 今現在、generics対応している自動生成ファイル(DO NOT EDITで始まるもの)はないと思っているので、
+**in golang.org/x/exp/typeparams implemented same APIs.**  
+So, after Go future updates, typeparms will be in stadard Go statistic check package such as types.When that actually happens this API(tslist.InterfaceVisitor) will become duplicated
+## Demo(tslist)
