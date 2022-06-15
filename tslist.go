@@ -14,7 +14,7 @@ import (
 	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
-const doc = "tslist is ..."
+const doc = "tslist shows the list about types satisfied by type sets"
 
 const INF = 1 << 60
 
@@ -56,7 +56,7 @@ type Result struct {
 	Results []VisitorResult
 }
 
-// Analyzer is ...
+// Analyzer is retruning type sets and method lists
 var Analyzer = &analysis.Analyzer{
 	Name: "tslist",
 	Doc:  doc,
