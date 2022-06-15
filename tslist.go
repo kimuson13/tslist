@@ -35,10 +35,10 @@ type Visitor struct {
 }
 
 type VisitorResult struct {
-	Pos     token.Pos
-	Name    string
-	TypeSet []TypeValue
-	Methods []Method
+	Pos      token.Pos
+	Name     string
+	TypeSets []TypeValue
+	Methods  []Method
 }
 
 type Method struct {
@@ -49,7 +49,7 @@ type Method struct {
 
 type TypeValue struct {
 	Name string
-	Typ  types.Type
+	Type types.Type
 }
 
 type Result struct {
@@ -113,7 +113,7 @@ func InterfaceVisitor(name string, interfaceType *ast.InterfaceType, pass *analy
 	typeSet := visit.parseTypeSet()
 	visit.parseMethodList()
 
-	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSet: typeSet, Methods: visit.methodResults}
+	return VisitorResult{Pos: interfaceType.Pos(), Name: name, TypeSets: typeSet, Methods: visit.methodResults}
 }
 
 func (v *Visitor) parseTypeSet() []TypeValue {
@@ -222,7 +222,7 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 		switch dec := dec.Type.(type) {
 		case *ast.InterfaceType:
 			res := InterfaceVisitor(v.interfaceName, dec, v.pass)
-			for _, ts := range res.TypeSet {
+			for _, ts := range res.TypeSets {
 				v.typeResults[v.nest] = append(v.typeResults[v.nest], ts.Name)
 			}
 		case *ast.Ident:

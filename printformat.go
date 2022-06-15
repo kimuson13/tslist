@@ -3,11 +3,11 @@ package tslist
 import "fmt"
 
 func typeSetPrint(vs VisitorResult) string {
-	if len(vs.TypeSet) == 0 {
+	if len(vs.TypeSets) == 0 {
 		return "empty"
 	}
-	tslist := make([]string, 0, len(vs.TypeSet))
-	for _, v := range vs.TypeSet {
+	tslist := make([]string, 0, len(vs.TypeSets))
+	for _, v := range vs.TypeSets {
 		tslist = append(tslist, v.Name)
 	}
 	return fmt.Sprintf("%v", tslist)
@@ -52,8 +52,8 @@ func addValues(format string, tvs []TypeValue) string {
 
 func addValue(format string, typeValue TypeValue) string {
 	if typeValue.Name == "" {
-		return typeValue.Typ.String()
+		return typeValue.Type.String()
 	}
 
-	return fmt.Sprintf("%s %s", typeValue.Name, typeValue.Typ.String())
+	return fmt.Sprintf("%s %s", typeValue.Name, typeValue.Type.String())
 }
