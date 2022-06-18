@@ -224,6 +224,7 @@ func (v *Visitor) identVisitor(expr *ast.Ident) {
 			res := InterfaceVisitor(v.interfaceName, dec, v.pass)
 			for _, ts := range res.TypeSets {
 				v.typeResults[v.nest] = append(v.typeResults[v.nest], ts.Name)
+				v.addType(ts.Name, ts.Type)
 			}
 		case *ast.Ident:
 			typ := v.pass.TypesInfo.TypeOf(dec)

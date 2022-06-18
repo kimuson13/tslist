@@ -69,7 +69,7 @@ method list:
 
 /[your file path]/golang.org/x/exp@[some versions]constraints/constraints.go:26:14: 
 Integer
-type set: empty
+type set: [~uint32 ~uint64 ~int ~int16 ~int32 ~uint ~uint8 ~int8 ~int64 ~uint16 ~uintptr]
 method list:
 
 /[your file path]/golang.org/x/exp@[some versions]constraints/constraints.go:33:12: 
@@ -84,7 +84,7 @@ method list:
 
 /[your file path]/golang.org/x/exp@[some versions]constraints/constraints.go:48:14: 
 Ordered
-type set: [~string]
+type set: [~int32 ~uintptr ~string ~uint8 ~int64 ~float64 ~uint64 ~uint32 ~int8 ~int16 ~uint16 ~int ~uint ~float32]
 method list:
 
 /[your file path]/golang.org/x/exp@[some versions]constraints/constraints.go:12:13: 
