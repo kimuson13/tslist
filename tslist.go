@@ -91,8 +91,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		}
 	}
 
-	fmt.Println(result.Results)
-
 	for _, res := range result.Results {
 		ts := typeSetPrint(res)
 		methodList := methodListPrint(res)

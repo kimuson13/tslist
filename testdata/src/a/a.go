@@ -108,3 +108,8 @@ type i19 interface {
 	int | i5
 	string
 }
+
+type i20 interface {
+	~int
+	~int
+}
