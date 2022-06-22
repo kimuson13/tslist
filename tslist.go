@@ -91,6 +91,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		}
 	}
 
+	fmt.Println(result.Results)
+
 	for _, res := range result.Results {
 		ts := typeSetPrint(res)
 		methodList := methodListPrint(res)
@@ -123,7 +125,12 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 			continue
 		}
 
+		results = lo.Uniq(results)
+
 		for _, result := range results {
+			if lo.Contains(results, fmt.Sprintf("~%s", result)) {
+				continue
+			}
 			typeSet[result]++
 		}
 	}
@@ -154,7 +161,7 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 	}
 
 	for typeName, num := range typeSet {
-		if num >= v.nest {
+		if num == v.nest {
 			if typ, ok := v.mp[typeName]; ok {
 				res = append(res, TypeValue{typeName, typ})
 			}

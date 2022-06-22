@@ -101,5 +101,10 @@ type i17 interface { // want "empty"
 }
 
 type i18 interface {
-	int | i12
+	int | i5
+}
+
+type i19 interface {
+	int | i5
+	string
 }
