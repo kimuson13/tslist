@@ -16,8 +16,6 @@ import (
 
 const doc = "tslist shows the list about types satisfied by type sets"
 
-const INF = 1 << 60
-
 const (
 	ANY   = "any"
 	TILDA = "~"
@@ -143,7 +141,7 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 		}
 
 		v.nest -= typeSet[ANY]
-		typeSet[ANY] = INF
+		typeSet[ANY] = -1
 	}
 
 	for typ := range typeSet {
@@ -156,7 +154,7 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 	}
 
 	for typeName, num := range typeSet {
-		if num == v.nest {
+		if num >= v.nest {
 			if typ, ok := v.mp[typeName]; ok {
 				res = append(res, TypeValue{typeName, typ})
 			}
