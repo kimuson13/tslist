@@ -134,6 +134,11 @@ func (v *Visitor) parseTypeSet() []TypeValue {
 	}
 
 	res := make([]TypeValue, 0, len(typeSet))
+	if len(v.typeResults) == 0 {
+		res = append(res, TypeValue{Name: ANY})
+		return res
+	}
+
 	// intersection
 	if _, ok := typeSet[ANY]; ok {
 		if len(typeSet) == 1 {
