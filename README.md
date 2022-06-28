@@ -102,7 +102,7 @@ method list:
 $ tslist fmt
 /usr/local/go/src/fmt/print.go:38:12: 
 State
-type set: empty
+type set: [any]
 method list:
 Write(b []byte) (n int, err error) 
 Width() (wid int, ok bool) 
@@ -111,25 +111,25 @@ Flag(c int) bool
 
 /usr/local/go/src/fmt/print.go:53:16: 
 Formatter
-type set: empty
+type set: [any]
 method list:
 Format(f fmt.State, verb rune) 
 
 /usr/local/go/src/fmt/print.go:62:15: 
 Stringer
-type set: empty
+type set: [any]
 method list:
 String() string
 
 /usr/local/go/src/fmt/print.go:70:17: 
 GoStringer
-type set: empty
+type set: [any]
 method list:
 GoString() string
 
 /usr/local/go/src/fmt/scan.go:21:16: 
 ScanState
-type set: empty
+type set: [any]
 method list:
 ReadRune() (r rune, size int, err error) 
 UnreadRune() error
@@ -140,7 +140,7 @@ Read(buf []byte) (n int, err error)
 
 /usr/local/go/src/fmt/scan.go:55:14: 
 Scanner
-type set: empty
+type set: [any]
 method list:
 Scan(state fmt.ScanState, verb rune) error
 ```
